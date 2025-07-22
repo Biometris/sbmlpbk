@@ -1,0 +1,178 @@
+---
+title: "Load SBML and run simulation"
+author: "Johannes Kruisselbrink"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    toc: false
+    number_sections: true
+vignette: >
+  %\VignetteIndexEntry{The sbmlpbk package}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.dim = c(7, 4),
+  tidy.opts = list(width.cutoff = 60),
+  tidy = TRUE
+)
+op <- options(width = 90)
+library(sbmlpbk)
+library(deSolve)
+```
+
+# The sbmlpbk package
+
+An R package for importing Physiologically Based Kinetic (PBK) models encoded in the Systems Biology Markup Language (SBML) format, enabling  simulation using the `deSolve` package.
+
+## Loading a model
+
+Use the function `loadSBML` to load a PBK model from an SBML file. As an example, the package includes a simple SBML PBK model `simple_oral.sbml`. The following example shows how to load the model from this file:
+
+```{r loadSBML}
+## Load SBML model from file
+file_simple_oral <- system.file("extdata/", "simple_oral.sbml", package = "sbmlpbk")
+model <- load_sbml(file_simple_oral)
+```
+
+The output of the `loadSBML` function is an object of class `sbmlModel`. This object is a named `list` with of the following elements:
+
+- **compartment_ids: ** A character vector containing the IDs of the model compartments.
+- **species_ids: ** A character vector containing the IDs of the model species.
+- **param_ids: ** A character vector containing the IDs of the model parameter.
+- **function_defs: ** A list of the additional functions defined in the SBML file, each in the form of character strings representing R expressions. 
+- **reactions: ** A list of reactions, each defined as a list of ID, reactant (species ID), product (species ID), and kinetic law (character string of R expression).
+- **rules: ** A list of the assignment rules defined in the SBML file, each in the form of character strings representing the R expression. 
+- **odes: ** A list of ODEs generated from the SBML file, each in the form of character strings representing the R expression. 
+- **default_params: ** Vector with the default values of the parameters of the model. 
+- **func: ** A `deSolve` compliant R-function for running simulations using the `ode` function. 
+
+The `summary` function can be used to get a short description of the content of an `sbmlModel` object.
+
+```{r modelSummary}
+summary(model)
+```
+
+## Inspecting model equations
+
+To print the equations of the loaded model, type:
+
+```{r modelEquations}
+print(model, type = 'equations')
+```
+
+## Running simulations
+
+The code below shows how to run simulations using the `ode` function of `deSolve`.
+
+```{r loadModelFunctions}
+## Load model functions
+load_functions(model)
+
+## Load params
+params_csv <- system.file("extdata/", "simple_oral_params.csv", package = "sbmlpbk")
+params <- load_params(model, file = params_csv, param_instance = "simple_PARAM")
+
+# Set input species
+input_species <- "AGut"
+
+# Set input events (single unit bolus at time 5)
+eventdat <- data.frame(var = c(input_species), time = c(5), value = c(1), method = c("add"))
+
+# Set initial states
+initial_states <- setNames(as.numeric(rep(0, length((model$species)))), model$species)
+
+# Set simulation times
+times <- seq(0, 40, 0.1)
+
+# Simulate
+out <- ode(
+  y = initial_states,
+  times = times,
+  func = model$func,
+  parms = params,
+  events = list(data = eventdat)
+)
+```
+
+In this example, the function `load_params` loads the parameter values from a CSV file. Alternatively, `model$default_params` can be passed to use the model's default parameters. The function `load_functions` loads the additional functions defined in the SBML file.
+
+From here, the simulation output is ready for any further processing. We can, for example, plot the output time series as follows:
+
+```{r plotSimulationResults}
+# Set up plotting layout
+n_cols <- 3
+n_rows <- ceiling(length(model$species_ids) / n_cols)
+par(mfrow = c(n_rows, n_cols), mar = c(4, 4, 2, 1))
+
+# Loop through variables and plot
+for (species in model$species_ids) {
+  plot(out[,1], out[,species],
+       type = "l",
+       main = species,
+       xlab = "time",
+       ylab = species)
+}
+```
+
+## Running dosing scenarions
+
+Running PBK model simulations with various dosing scenarios requires construction of `deSolve` \code{events} patterns.
+
+```{r createDoseEvents}
+dosing_scenarios <- list(
+  # Single bolus dose of amount 20 at time 12
+  list(
+    target = "AGut",
+    dose_type = "single_bolus",
+    time = 24,
+    amount = 20
+  ),
+  # Repeated bolus dose with amount 10, starting at time 10, repeating
+  # with an interval of every 96 time steps until time 240 
+  list(
+    target = "AGut",
+    dose_type = "repeated_bolus",
+    time = 96,
+    amount = 10,
+    interval = 24,
+    until = 240
+  )
+)
+
+# Set simulation times
+times <- seq(0, 302, 0.1)
+
+## Create and set deSolve dosing events
+eventdat <- create_dosing_events(dosing_scenarios)
+
+# Set initial states
+initial_states <- setNames(as.numeric(rep(0, length((model$species)))), model$species)
+
+# Simulate
+out <- ode(
+  y = initial_states,
+  times = times,
+  func = model$func,
+  parms = model$default_params,
+  events = list(data = eventdat)
+)
+
+# Set up plotting layout
+n_cols <- 3
+n_rows <- ceiling(length(model$species_ids) / n_cols)
+par(mfrow = c(n_rows, n_cols), mar = c(4, 4, 2, 1))
+
+# Loop through variables and plot
+for (species in model$species_ids) {
+  plot(out[,1], out[,species],
+       type = "l",
+       main = species,
+       xlab = "time",
+       ylab = species)
+}
+```

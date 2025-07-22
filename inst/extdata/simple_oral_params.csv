@@ -1,0 +1,12 @@
+idModelInstance,Parameter,Value,Unit,Description,Reference
+simple_PARAM,BW,70.0,kg,body weight,
+simple_PARAM,VRc,0.9003,L/kg,rest-of-body as fraction of total bodyweight,
+simple_PARAM,VLc,0.0257,L/kg,liver as fraction of total bodyweight,
+simple_PARAM,VBc,0.074,L/kg,blood as fraction of total bodyweight,
+simple_PARAM,QCC,15.0,L/h/kg^0.75,cardiac output as function of body weight,
+simple_PARAM,QRc,0.773,dimensionless,fraction of blood flow to rest-of-body,
+simple_PARAM,QLc,0.227,dimensionless,fraction of blood flow to liver,
+simple_PARAM,PCLiver,2.0,dimensionless,partition coefficient liver:blood,
+simple_PARAM,PCRest,1.2,dimensionless,partition coefficient rest:blood,
+simple_PARAM,CLUrine,10.0,L/h,urinary excretion rate,
+simple_PARAM,Ka,0.05,/h,absorption rate from gut to liver,

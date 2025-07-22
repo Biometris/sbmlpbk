@@ -1,0 +1,136 @@
+#' Summary function for the class \code{sbmlModel}
+#'
+#' Gives a summary for an object of S3 class \code{sbmlModel}.
+#'
+#' @param object An object of class \code{sbmlModel}.
+#' @param ... Not used.
+#'
+#' @returns A list with summary items.
+#'
+#' @export
+summary.sbmlModel <- function(object, ...) {
+  stopifnot(inherits(object, "sbmlModel"))
+  summary_list <- list(
+    compartment_count = length(object$compartment_ids),
+    compartment_ids = object$compartment_ids,
+    species_count = length(object$species_ids),
+    species_ids = object$species_ids,
+    param_count = length(object$param_ids),
+    param_ids = object$param_ids,
+    function_count = length(object$function_defs),
+    function_ids = names(object$function_defs),
+    reaction_count = length(object$reactions)
+  )
+  class(summary_list) <- "summary.sbmlModel"
+  return(summary_list)
+}
+
+#' Printing summarized objects of class sbmlModel
+#'
+#' \code{print} method for object of class summary.sbmlModel created by summarizing
+#' objects of class sbmlModel.
+#'
+#' @param x An object of class \code{sbmlModel}.
+#' @param ... Not used.
+#'
+#' @noRd
+#' @export
+print.summary.sbmlModel <- function(x, ...) {
+  print_summary(x, ...)
+  invisible()
+}
+
+#' Print an \code{sbmlModel} Object
+#'
+#' This is a print method for objects of class `sbmlModel`. It supports multiple
+#' output modes depending on the `type` argument.
+#'
+#' @param x An object of class `sbmlModel`.
+#' @param ... Additional arguments. The following argument can be passed via \code{...}:
+#'   \describe{
+#'     \item{\code{type}}{A character string, either `"summary"` (default) or `"equations"`.
+#'     Controls whether a high-level summary or the model's differential equations are printed.}
+#'   }
+#'
+#' @examples
+#' file <- system.file("extdata/", "simple_oral.sbml", package = "sbmlpbk")
+#' model <- load_sbml(file)
+#' print(model, type = "summary")
+#' print(model, type = "equations")
+#'
+#' @export
+print.sbmlModel <- function(x, ...) {
+  args <- list(...)
+  type <- if ("type" %in% names(args)) args$type else "summary"
+  type <- match.arg(type, choices = c("summary", "equations"))
+  switch(
+    type,
+    summary = {
+      print(summary(x))
+    },
+    equations = {
+      print_equations(x)
+    }
+  )
+
+  invisible()
+}
+
+#' @importFrom utils head
+#' @noRd
+#' @keywords internal
+print_summary <- function(x, ...) {
+  cat("==================\n")
+  cat("SBML Model Summary\n")
+  cat("==================\n\n")
+
+  cat("Compartments:\t", x$compartment_count, "\t[ ")
+  cat(paste(head(x$compartment_ids, 5), collapse = ", "))
+  if (length(x$compartment_ids) > 5) cat(", ...")
+  cat(" ]\n")
+
+  cat("Species:\t", x$species_count, "\t[ ")
+  cat(paste(head(x$species_ids, 5), collapse = ", "))
+  if (length(x$species_ids) > 5) cat(", ...")
+  cat(" ]\n")
+
+  cat("Parameters:\t", x$param_count, "\t[ ")
+  cat(paste(head(x$param_ids, 5), collapse = ", "))
+  if (length(x$param_ids) > 5) cat(", ...")
+  cat(" ]\n")
+
+  cat("Functions:\t", x$function_count)
+  if (length(x$function_ids) > 0) {
+    cat("\t[ ")
+    cat(paste(head(x$function_ids, 5), collapse = ", "))
+    if (length(x$function_ids) > 5) {
+      cat(", ...")
+    }
+    cat(" ]")
+  }
+  cat("\n")
+
+  cat("Reactions:\t", x$reaction_count, "\n\n")
+
+  invisible()
+}
+
+#' @noRd
+#' @keywords internal
+print_equations <- function(model) {
+  if (length(model$function_defs) > 0) {
+    cat("## Functions\n")
+    sapply(model$function_defs, FUN = function(x) cat(paste0(x, "\n", sep="")))
+  }
+  cat("\n")
+  cat("## Assignments\n")
+  if (length(model$rules) > 0) {
+    sapply(model$rules, FUN = function(x) cat(paste0(x, "\n", sep="")))
+  }
+  cat("\n")
+  cat("## ODEs\n")
+  sapply(model$odes, FUN = function(x) cat(paste0(x, "\n", sep="")))
+  cat("\n")
+
+  invisible()
+}
