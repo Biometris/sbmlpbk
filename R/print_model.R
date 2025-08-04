@@ -19,7 +19,16 @@ summary.sbmlModel <- function(object, ...) {
     param_ids = object$param_ids,
     function_count = length(object$function_defs),
     function_ids = names(object$function_defs),
-    reaction_count = length(object$reactions)
+    reaction_count = length(object$reactions),
+    time_unit = if (!is.na(object$model_units$time))
+      create_unit_string(object$unit_defs[[object$model_units$time]])
+        else 'not specified',
+    amount_unit = if (!is.na(object$model_units$amount))
+      create_unit_string(object$unit_defs[[object$model_units$amount]])
+        else 'not specified',
+    volume_unit = if (!is.na(object$model_units$volume))
+      create_unit_string(object$unit_defs[[object$model_units$volume]])
+        else 'not specified'
   )
   class(summary_list) <- "summary.sbmlModel"
   return(summary_list)
@@ -111,6 +120,11 @@ print_summary <- function(x, ...) {
   cat("\n")
 
   cat("Reactions:\t", x$reaction_count, "\n\n")
+
+  cat("Time unit:\t", x$time_unit, "\n")
+  cat("Amount unit:\t", x$amount_unit, "\n")
+  cat("Volume unit:\t", x$volume_unit, "\n")
+  cat("\n")
 
   invisible()
 }

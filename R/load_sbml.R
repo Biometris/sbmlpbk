@@ -77,18 +77,17 @@ load_sbml <- function(sbml_file) {
 
   sbml_xml <- xml2::read_xml(sbml_file)
 
-  # Check that root namespace is a valid SBML Level 3 namespace
-  valid_sbml_namespaces <- c(
-    "http://www.sbml.org/sbml/level3/version1/core",
-    "http://www.sbml.org/sbml/level3/version2/core"
-  )
-
   # Get all namespace declarations from the root node
   ns_map <- xml2::xml_ns(sbml_xml)
 
   # Extract the default namespace (no prefix), if any
   root_ns <- ns_map[[1]]
 
+  # Check that root namespace is a valid SBML Level 3 namespace
+  valid_sbml_namespaces <- c(
+    "http://www.sbml.org/sbml/level3/version1/core",
+    "http://www.sbml.org/sbml/level3/version2/core"
+  )
   if (!(root_ns %in% valid_sbml_namespaces)) {
     stop(
       sprintf(
@@ -105,10 +104,30 @@ load_sbml <- function(sbml_file) {
   )
 
   # Get model time unit
-  time_unit <- xml2::xml_attr(sbml_xml, "timeUnits")
+  model_node <- xml2::xml_find_first(sbml_xml, ".//sbml:model", ns)
+  model_units <- list(
+    time = xml2::xml_attr(model_node, "timeUnits"),
+    amount = xml2::xml_attr(model_node, "substanceUnits"),
+    volume = xml2::xml_attr(model_node, "volumeUnits"),
+    extent = xml2::xml_attr(model_node, "extentUnits")
+  )
 
-  # Get model substance amount unit
-  amount_unit <- xml2::xml_attr(sbml_xml, "substanceUnits")
+  # Extract compartments and compartment sizes
+  unit_def_nodes <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfUnitDefinitions/sbml:unitDefinition", ns)
+  unit_defs <- lapply(unit_def_nodes, function(ud) {
+    ud_id <- xml2::xml_attr(ud, "id")
+    units <- xml2::xml_find_all(ud, ".//sbml:unit", ns)
+    unit_list <- lapply(units, function(u) {
+      list(
+        kind = xml2::xml_attr(u, "kind"),
+        exponent = as.numeric(xml2::xml_attr(u, "exponent")),
+        scale = as.numeric(xml2::xml_attr(u, "scale")),
+        multiplier = as.numeric(xml2::xml_attr(u, "multiplier"))
+      )
+    })
+    list(id = ud_id, units = unit_list)
+  })
+  names(unit_defs) <- sapply(unit_defs, function(x) x$id)
 
   # Extract compartments and compartment sizes
   compartment_nodes <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfCompartments/sbml:compartment", ns)
@@ -138,12 +157,6 @@ load_sbml <- function(sbml_file) {
     }),
     sapply(functions_list, function(fct) xml2::xml_attr(fct, "id"))
   )
-
-  # Check for initial assignments
-  initial_assignment_nodes <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfInitialAssigments/sbml:initialAssignment", ns)
-  if (length(initial_assignment_nodes) > 0) {
-    stop("SBML model contains initial assigmnents, which are currently not supported")
-  }
 
   # Extract assignment rules
   rule_nodes <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfRules/sbml:assignmentRule", ns)
@@ -263,8 +276,8 @@ load_sbml <- function(sbml_file) {
       odes = odes,
       default_params = parameters,
       func = model_func,
-      time_unit = time_unit,
-      amount_unit = amount_unit
+      unit_defs = unit_defs,
+      model_units = model_units
     ),
     class = "sbmlModel"
   )

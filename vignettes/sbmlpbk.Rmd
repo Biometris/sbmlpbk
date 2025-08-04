@@ -121,34 +121,46 @@ for (species in model$species_ids) {
 
 ## Running dosing scenarions
 
-Running PBK model simulations with various dosing scenarios requires construction of `deSolve` \code{events} patterns.
+Running PBK model simulations with various dosing scenarios requires construction of `deSolve` \code{events} patterns. As PBK models may differ in time resolution (e.g., hours/days) and dosing amounts (e.g., mg, ug, moles) creation of dosing scenarios, running simulations, and evaluating outputs requires alignment of the model's time resolution and dosing/output amounts with the desired resolutions. The methods \code{create_dosing_events} and \code{create_times_seq} are provided to assist with this. The method \code{create_dosing_events} creates `deSolve`-compatible events from a specified dosing scenario in a user-specified time unit and amounts unit. Likewise, the method \code{create_times_seq} creates a \code{deSolve} compliant \code{times} sequence, specifying the times for which simulation output is wanted.
 
 ```{r createDoseEvents}
-dosing_scenarios <- list(
-  # Single bolus dose of amount 20 at time 12
+dosing_events <- list(
+  # Single bolus dose of amount 20 at time 1 (in days)
   list(
     target = "AGut",
     dose_type = "single_bolus",
-    time = 24,
+    time = 1,
     amount = 20
   ),
-  # Repeated bolus dose with amount 10, starting at time 10, repeating
-  # with an interval of every 96 time steps until time 240 
+  # Repeated bolus dose with amount 10, starting at day 4, repeating
+  # every day until time day 10 
   list(
     target = "AGut",
     dose_type = "repeated_bolus",
-    time = 96,
+    time = 4,
     amount = 10,
-    interval = 24,
-    until = 240
+    interval = 1,
+    until = 10
   )
 )
 
-# Set simulation times
-times <- seq(0, 302, 0.1)
+# Set simulation times; 10 days with hourly evaluation resolution
+num_days = 10
+evals_per_day = 24
+times <- create_times_seq(
+  model,
+  duration = num_days,
+  step = 1/24,
+  unit = 'd'
+)
 
-## Create and set deSolve dosing events
-eventdat <- create_dosing_events(dosing_scenarios)
+# Create and set deSolve dosing events
+eventdat <- create_dosing_events(
+  model,
+  dosing_events,
+  time_unit = 'd',   # events time unit was in days
+  amount_unit = 'ug'
+)
 
 # Set initial states
 initial_states <- setNames(as.numeric(rep(0, length((model$species)))), model$species)
@@ -172,7 +184,7 @@ for (species in model$species_ids) {
   plot(out[,1], out[,species],
        type = "l",
        main = species,
-       xlab = "time",
-       ylab = species)
+       xlab = paste("time [", summary(model)$time_unit, "]", sep=""),
+       ylab = paste(species, " [", summary(model)$amount_unit, "]", sep=""))
 }
 ```

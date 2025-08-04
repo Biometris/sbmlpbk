@@ -2,18 +2,33 @@
 % Please edit documentation in R/create_dosing_events.R
 \name{create_dosing_events}
 \alias{create_dosing_events}
-\title{Create deSolve-Compatible Events from specified dosing scenarios}
+\title{Create deSolve-compatible events from specified dosing scenarios}
 \usage{
-create_dosing_events(dosing_scenarios)
+create_dosing_events(model, dosing_events, time_unit = "h", amount_unit = "ug")
 }
 \arguments{
-\item{dosing_scenarios}{A list of dosing scenarios, where each element is a
+\item{model}{An object of class \code{sbmlModel} for which the
+dosing events should be created.}
+
+\item{dosing_events}{A list of dosing scenarios, where each element is a
 named list following a fixed structure. Each scenario is described by a
 scenario \code{type} describing the type of the dosing pattern (single vs.
 repeated and bolus vs. continuous) and a \code{target}. Furthermore, all
 scenarios must have a \code{time} and an \code{amount}, and may include
 the an \code{interval}, a \code{duration}, and an \code{until}
 specification, depending on the dosing type.}
+
+\item{time_unit}{An optional character string describing the time unit
+of the specified \code{dosing_events}. Event timings are aligned with the
+time unit of the \code{model}. Current options are "h" for hours (default),
+"d" for days, or "model" when assuming the timings of the specified events are
+already aligned with the time unit of the \code{model}.}
+
+\item{amount_unit}{An optional character string describing the amount unit
+of the specified \code{dosing_events}. Amounts of the dosing events are
+aligned with the amount unit of the \code{model}. Current options are "ng",
+"ug" (default), "mg", or "model" (assuming the timings of the specified
+events are already aligned with the time unit of the \code{model}).}
 }
 \value{
 A \code{data.frame} formatted for use as the \code{events} argument
@@ -47,7 +62,9 @@ The target compartment/state variable for each dose is assumed to be specified
 in a field like \code{target} or by default as \code{"A_Gut"} if unspecified.
 }
 \examples{
-dosing_scenarios <- list(
+model_file <- system.file("extdata/", "simple_oral.sbml", package = "sbmlpbk")
+model <- load_sbml(model_file)
+dosing_events <- list(
   list(target = "AGut", dose_type = "single_bolus", amount = 100, time = 0),
   list(
     target = "AGut",
@@ -57,19 +74,19 @@ dosing_scenarios <- list(
     interval = 24,
     until = 96
   ),
-  list(target = "AAir", dose_type = "single_continuous", amount = 240, time = 0, duration = 24),
+  list(target = "AAir", dose_type = "single_continuous", amount = 20, time = 0, duration = 24),
   list(
     target = "AAir",
     dose_type = "repeated_continuous",
-    amount = 8,
-    time = 0,
+    amount = 20,
+    time = 56,
     duration = 12,
     interval = 24,
     until = 96
   )
 )
 
-events <- create_dosing_events(dosing_scenarios)
+events <- create_dosing_events(model, dosing_events)
 head(events)
 
 }
