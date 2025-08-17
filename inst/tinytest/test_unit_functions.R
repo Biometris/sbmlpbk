@@ -9,7 +9,7 @@ unit_definitions <- list(
   m3 = list(id = "m3", units = list(list(kind="meter", exponent=3, scale=0, multiplier=1))),
   s = list(id = "s", units = list(list(kind="second", exponent=1, scale=0, multiplier=1))),
   min = list(id = "min", units = list(list(kind="second", exponent=1, scale=0, multiplier=60))),
-  h = list(id = "min", units = list(list(kind="second", exponent=1, scale=0, multiplier=3600))),
+  h = list(id = "h", units = list(list(kind="second", exponent=1, scale=0, multiplier=3600))),
   d = list(id = "d", units = list(list(kind="second", exponent=1, scale=0, multiplier=86400))),
   per_d = list(id = "per_d", units = list(list(kind="second", exponent=-1, scale=0, multiplier=86400))),
   mol_per_s = list(

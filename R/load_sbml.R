@@ -131,18 +131,40 @@ load_sbml <- function(sbml_file) {
 
   # Extract compartments and compartment sizes
   compartment_nodes <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfCompartments/sbml:compartment", ns)
-  compartment_ids <- xml2::xml_attr(compartment_nodes, "id")
-  compartment_sizes <- as.numeric(xml2::xml_attr(compartment_nodes, "size"))
+  compartments <- lapply(compartment_nodes, function(s) {
+    list(
+      id = xml2::xml_attr(s, "id"),
+      size = as.numeric(xml2::xml_attr(s, "size"))
+    )
+  })
+  names(compartments) <- sapply(compartments, `[[`, "id")
 
-  # Extract species and initial conditions
+  # Extract species
   species_nodes <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfSpecies/sbml:species", ns)
-  species_ids <- xml2::xml_attr(species_nodes, "id")
+  species <- lapply(species_nodes, function(s) {
+    list(
+      id = xml2::xml_attr(s, "id"),
+      compartment = xml2::xml_attr(s, "compartment"),
+      is_amount = is_amount_species(s, sbml_xml, ns)
+    )
+  })
+  names(species) <- sapply(species, `[[`, "id")
 
   # Extract parameters
   param_nodes <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfParameters/sbml:parameter", ns)
-  param_ids <- xml2::xml_attr(param_nodes, "id")
-  param_vals <- as.numeric(xml2::xml_attr(param_nodes, "value"))
-  parameters <- stats::setNames(param_vals, param_ids)
+  params <- lapply(param_nodes, function(s) {
+    list(
+      id = xml2::xml_attr(s, "id"),
+      value = as.numeric(xml2::xml_attr(s, "value"))
+    )
+  })
+  names(params) <- sapply(params, `[[`, "id")
+
+  # Combine parameters with compartment sizes
+  params <- c(
+    stats::setNames(lapply(params, function(x) x$value), names(params)),
+    stats::setNames(lapply(compartments, function(x) x$size), names(compartments))
+  )
 
   # Extract species and initial conditions
   functions_list <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfFunctionDefinitions/sbml:functionDefinition", ns)
@@ -218,7 +240,7 @@ load_sbml <- function(sbml_file) {
   }
 
   # Build ODEs for each species
-  odes <- stats::setNames(vector("list", length(species_ids)), species_ids)
+  odes <- stats::setNames(vector("list", length(species)), names(species))
   for (reaction in reactions_data) {
     reactants <- reaction$reactant
     products <- reaction$product
@@ -226,61 +248,71 @@ load_sbml <- function(sbml_file) {
 
     # Add rate to product species (production)
     for (prod in products) {
-      odes[[prod]] <- if (is.null(odes[[prod]])) {
-        paste0("d", prod, " <- ", rate)
+      sp <- species[[prod]]
+      if (sp$is_amount) {
+        term <- rate
       } else {
-        paste(odes[[prod]], "+", rate)
+        term <- paste0("(", rate, ") / ", sp$compartment)
+      }
+      odes[[prod]] <- if (is.null(odes[[prod]])) {
+        paste0("d", prod, " <- ", term)
+      } else {
+        paste(odes[[prod]], "+", term)
       }
     }
 
     # Subtract rate from reactant species (consumption)
     for (reac in reactants) {
-      odes[[reac]] <- if (is.null(odes[[reac]])) {
-        paste0("d", reac, " <- -", rate)
+      sp <- species[[reac]]
+      if (sp$is_amount) {
+        term <- rate
       } else {
-        paste(odes[[reac]], "-", rate)
+        term <- paste0("(", rate, ") / ", sp$compartment)
+      }
+      odes[[reac]] <- if (is.null(odes[[reac]])) {
+        paste0("d", reac, " <- -", term)
+      } else {
+        paste(odes[[reac]], "-", term)
       }
     }
   }
 
-  # Define model function
-  model_func <- function(time, state, parameters) {
-    with(as.list(c(state, parameters)), {
-      # Evaluate assignment rules and assign to local variables
-      if (length(rules) > 0) {
-        for (eqn in rules) {
-          eval(parse(text = eqn), envir = environment())  # evaluate in local environment
-        }
-      }
-      derivs <- lapply(odes, function(eqn) eval(parse(text = eqn)))
-      names(derivs) <- names(state)
-      return(list(derivs))
-    })
-  }
-
-  # Combine parameters with compartment sizes
-  parameters <- c(
-    stats::setNames(parameters, param_ids),
-    stats::setNames(compartment_sizes, compartment_ids)
-  )
-  param_ids <- c(param_ids, compartment_ids)
-
-  sbmlModel <- structure(
+  # Create the model structure
+  model <- structure(
     list(
-      compartment_ids = compartment_ids,
-      species_ids = species_ids,
-      param_ids = param_ids,
+      compartments = compartments,
+      species = species,
+      params = params,
       function_defs = function_defs,
       reactions = reactions_data,
       rules = rules,
       odes = odes,
-      default_params = parameters,
-      func = model_func,
       unit_defs = unit_defs,
       model_units = model_units
     ),
     class = "sbmlModel"
   )
 
-  return(sbmlModel)
+  # Define model function
+  model$func <- create_desolve_func(model)
+
+  return(model)
+}
+
+is_substance_only_comp <- function(doc, comp_id, ns) {
+  comp_node <- xml2::xml_find_first(
+    doc, paste0(".//sbml:listOfCompartments/sbml:compartment[@id='", comp_id, "']"), ns
+  )
+  if (is.na(comp_node)) return(FALSE)
+  val <- xml2::xml_attr(comp_node, "substanceOnly")
+  if (is.null(val)) return(FALSE)
+  tolower(val) == "true"
+}
+
+is_amount_species <- function(species_node, doc, ns) {
+  hosu <- xml2::xml_attr(species_node, "hasOnlySubstanceUnits")
+  if (!is.null(hosu) && tolower(hosu) == "true") return(TRUE)
+
+  comp_id <- xml2::xml_attr(species_node, "compartment")
+  return(is_substance_only_comp(doc, comp_id, ns))
 }

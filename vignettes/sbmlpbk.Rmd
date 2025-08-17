@@ -41,14 +41,14 @@ model <- load_sbml(file_simple_oral)
 
 The output of the `loadSBML` function is an object of class `sbmlModel`. This object is a named `list` with of the following elements:
 
-- **compartment_ids: ** A character vector containing the IDs of the model compartments.
-- **species_ids: ** A character vector containing the IDs of the model species.
-- **param_ids: ** A character vector containing the IDs of the model parameter.
+- **compartment: ** A named list with the IDs and default sizes of the model compartments.
+- **species: ** A named list with the IDs and other info of the model species.
+- **param: ** A named list with the IDs and (default) values of the model parameters.
 - **function_defs: ** A list of the additional functions defined in the SBML file, each in the form of character strings representing R expressions. 
 - **reactions: ** A list of reactions, each defined as a list of ID, reactant (species ID), product (species ID), and kinetic law (character string of R expression).
 - **rules: ** A list of the assignment rules defined in the SBML file, each in the form of character strings representing the R expression. 
 - **odes: ** A list of ODEs generated from the SBML file, each in the form of character strings representing the R expression. 
-- **default_params: ** Vector with the default values of the parameters of the model. 
+- **default_params: ** Vector with the default values of the parameters of the model.
 - **func: ** A `deSolve` compliant R-function for running simulations using the `ode` function. 
 
 The `summary` function can be used to get a short description of the content of an `sbmlModel` object.
@@ -83,34 +83,37 @@ input_species <- "AGut"
 # Set input events (single unit bolus at time 5)
 eventdat <- data.frame(var = c(input_species), time = c(5), value = c(1), method = c("add"))
 
-# Set initial states
-initial_states <- setNames(as.numeric(rep(0, length((model$species)))), model$species)
-
 # Set simulation times
 times <- seq(0, 40, 0.1)
+
+# Set initial states
+initial_states <- setNames(rep(0, length(model$species)), names(model$species))
+
+# Load deSolve model function
+func <- create_desolve_func(model)
 
 # Simulate
 out <- ode(
   y = initial_states,
   times = times,
-  func = model$func,
+  func = func,
   parms = params,
   events = list(data = eventdat)
 )
 ```
 
-In this example, the function `load_params` loads the parameter values from a CSV file. Alternatively, `model$default_params` can be passed to use the model's default parameters. The function `load_functions` loads the additional functions defined in the SBML file.
+In this example, the function `load_params` loads the parameter values from a CSV file. Alternatively, `model$default_params` can be passed to use the model's default parameters. The function `load_functions` loads the additional functions defined in the SBML file. The function `create_desolve_func` creates the function that can be used as `func` argument of `deSolve`'s `ode` function.
 
 From here, the simulation output is ready for any further processing. We can, for example, plot the output time series as follows:
 
 ```{r plotSimulationResults}
 # Set up plotting layout
 n_cols <- 3
-n_rows <- ceiling(length(model$species_ids) / n_cols)
+n_rows <- ceiling(length(model$species) / n_cols)
 par(mfrow = c(n_rows, n_cols), mar = c(4, 4, 2, 1))
 
 # Loop through variables and plot
-for (species in model$species_ids) {
+for (species in names(model$species)) {
   plot(out[,1], out[,species],
        type = "l",
        main = species,
@@ -121,7 +124,7 @@ for (species in model$species_ids) {
 
 ## Running dosing scenarions
 
-Running PBK model simulations with various dosing scenarios requires construction of `deSolve` \code{events} patterns. As PBK models may differ in time resolution (e.g., hours/days) and dosing amounts (e.g., mg, ug, moles) creation of dosing scenarios, running simulations, and evaluating outputs requires alignment of the model's time resolution and dosing/output amounts with the desired resolutions. The methods \code{create_dosing_events} and \code{create_times_seq} are provided to assist with this. The method \code{create_dosing_events} creates `deSolve`-compatible events from a specified dosing scenario in a user-specified time unit and amounts unit. Likewise, the method \code{create_times_seq} creates a \code{deSolve} compliant \code{times} sequence, specifying the times for which simulation output is wanted.
+Running PBK model simulations with various dosing scenarios requires construction of `deSolve` \code{events} patterns. As PBK models may differ in time resolution (e.g., hours/days) and dosing amounts (e.g., mg, ug, moles) creation of dosing scenarios, running simulations, and evaluating outputs requires alignment of the model's time resolution and dosing/output amounts with the desired resolutions. The methods \code{create_desolve_events} and \code{create_desolve_times} are provided to assist with this. The method \code{create_desolve_events} creates `deSolve`-compatible events from a specified dosing scenario in a user-specified time unit and amounts unit. Likewise, the method \code{create_desolve_times} creates a \code{deSolve} compliant \code{times} sequence, specifying the times for which simulation output is wanted.
 
 ```{r createDoseEvents}
 dosing_events <- list(
@@ -147,7 +150,7 @@ dosing_events <- list(
 # Set simulation times; 10 days with hourly evaluation resolution
 num_days = 10
 evals_per_day = 24
-times <- create_times_seq(
+times <- create_desolve_times(
   model,
   duration = num_days,
   step = 1/24,
@@ -155,7 +158,7 @@ times <- create_times_seq(
 )
 
 # Create and set deSolve dosing events
-eventdat <- create_dosing_events(
+eventdat <- create_desolve_events(
   model,
   dosing_events,
   time_unit = 'd',   # events time unit was in days
@@ -163,24 +166,27 @@ eventdat <- create_dosing_events(
 )
 
 # Set initial states
-initial_states <- setNames(as.numeric(rep(0, length((model$species)))), model$species)
+initial_states <- setNames(rep(0, length(model$species)), names(model$species))
+
+# Load deSolve model function
+func <- create_desolve_func(model)
 
 # Simulate
 out <- ode(
   y = initial_states,
   times = times,
-  func = model$func,
-  parms = model$default_params,
+  func = func,
+  parms = model$params,
   events = list(data = eventdat)
 )
 
 # Set up plotting layout
 n_cols <- 3
-n_rows <- ceiling(length(model$species_ids) / n_cols)
+n_rows <- ceiling(length(model$species) / n_cols)
 par(mfrow = c(n_rows, n_cols), mar = c(4, 4, 2, 1))
 
 # Loop through variables and plot
-for (species in model$species_ids) {
+for (species in names(model$species)) {
   plot(out[,1], out[,species],
        type = "l",
        main = species,

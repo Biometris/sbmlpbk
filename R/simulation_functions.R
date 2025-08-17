@@ -1,8 +1,188 @@
-#' Create deSolve-compatible events from specified dosing scenarios
+#' Loads the functions from the SBML model
+#'
+#' @param model SBML model S3 class.
+#' @param envir Environment in which to load the functions. Default the
+#' the environment from which the function is called.
+#'
+#' @returns An object of class \code{sbmlModel}.
+#' @export
+load_functions <- function(model, envir = parent.frame()) {
+  if (length(model$function_defs) > 0) {
+    for (eqn in model$function_defs) {
+      eval(parse(text = eqn), envir = envir)  # evaluate in local environment
+    }
+  }
+}
+
+#' Create a deSolve-compatible model function
+#'
+#' This function generates a closure that can be used as the `func` argument in
+#' \code{\link[deSolve]{ode}} or related solvers. The returned function computes
+#' derivatives from a model specification (ODEs and assignment rules), while
+#' optionally including selected compartment and parameter values in the output.
+#'
+#' @param model SBML model S3 class.
+#' @param compartment_ids Optional character vector of compartment IDs. If provided,
+#'   these compartments will be included as additional output variables in the
+#'   deSolve function.
+#' @param param_ids Optional character vector of parameter IDs. If provided,
+#'   these parameters will be included as additional output variables in the
+#'   deSolve function.
+#'
+#' @return A function with signature \code{function(time, state, parameters)} suitable
+#' for use with \code{\link[deSolve]{ode}}. The returned function produces a list with:
+#'   \itemize{
+#'     \item First element: vector of state derivatives (in the same order as \code{state}).
+#'     \item Subsequent elements: named numeric values of selected compartments
+#'       and/or parameters (if requested).
+#'   }
+#'
+#' @examples
+#' library(deSolve)
+#'
+#' # Load example model
+#' model_file <- system.file("extdata/", "simple_oral.sbml", package = "sbmlpbk")
+#' model <- load_sbml(model_file)
+#'
+#' # Create deSolve-compatible function
+#' func <- create_desolve_func(model, names(model$compartments), names(model$params))
+#'
+#' # Set initial states
+#' initial_states <- setNames(rep(0, length(model$species)), names(model$species))
+#'
+#' # Set input events (single unit bolus at time 1)
+#' eventdat <- data.frame(var = c("AGut"), time = c(1), value = c(1), method = c("add"))
+#'
+#' # Run simulation
+#' out <- ode(
+#'   y = initial_states,
+#'   times = seq(0, 24, by = 1),
+#'   func = func,
+#'   parms = model$params,
+#'   events = list(data = eventdat)
+#' )
+#' head(out)
+#'
+#' @seealso \code{\link[deSolve]{ode}}
+#' @export
+create_desolve_func <- function(
+    model,
+    compartment_ids = NULL,
+    param_ids = NULL
+) {
+  function(time, state, parameters) {
+    with(as.list(c(state, parameters)), {
+
+      # Evaluate assignment rules and assign to local variables
+      if (length(model$rules) > 0) {
+        for (eqn in model$rules) {
+          # Evaluate in local environment
+          eval(parse(text = eqn), envir = environment())
+        }
+      }
+
+      # Load derivatives functions
+      derivs <- lapply(
+        model$odes,
+        function(eqn) eval(parse(text = eqn), envir = environment())
+      )
+      names(derivs) <- names(state)
+
+      # Include selected compartments in deSolve func
+      if (!is.null(compartment_ids)) {
+        compartment_values <- lapply(
+          compartment_ids,
+          function(cmp_id) {
+            eval(parse(text = paste(cmp_id, '=', cmp_id)), envir = environment())
+          }
+        )
+        names(compartment_values) <- compartment_ids
+      } else {
+        compartment_values <- NULL
+      }
+
+      # Include selected parameters in deSolve func
+      if (!is.null(param_ids)) {
+        param_values <- lapply(
+          param_ids,
+          function(param_id) {
+            eval(parse(text = paste(param_id, '=', param_id)), envir = environment())
+          }
+        )
+        names(param_values) <- param_values
+      } else {
+        param_values <- NULL
+      }
+
+      return(list(derivs, do.call(c, list(compartment_values, param_values))))
+    })
+  }
+}
+
+#' Create a deSolve-compatible times sequence
+#'
+#' Creates a \code{deSolve} compliant \code{times} sequence that can be used as
+#' the `times` argument in \code{\link[deSolve]{ode}}, specifying the times for
+#' which simulation output is wanted.
+#'
+#' @param model An object of class \code{sbmlModel}.
+#' @param duration A number describing the total duration of the simulation.
+#' @param step A number describing the resolution in terms of step size.
+#' @param unit An optional character string describing the time unit of the
+#' specified duration and step length. Timings are aligned with the
+#' time unit of the \code{model}. Current options are "h" for hours (default),
+#' "d" for days, or "model" when assuming the specified duration and step length
+#' are considered in line with the time unit of the \code{model}.
+#'
+#' @return A \code{vector} of simulation output times formatted for use as the
+#' \code{times} argument in \code{\link[deSolve]{ode}}.
+#'
+#' @examples
+#' model_file <- system.file("extdata/", "simple_oral.sbml", package = "sbmlpbk")
+#' model <- load_sbml(model_file)
+#'
+#' times <- create_desolve_times(
+#'   model,
+#'   duration = 10, # 10 days
+#'   step = 1/24,   # every hour
+#'   unit = 'd'     # times in days
+#' )
+#'
+#' head(times)
+#'
+#' @importFrom utils head
+#' @seealso \code{\link[deSolve]{ode}}
+#' @export
+create_desolve_times <- function(
+    model,
+    duration,
+    step,
+    unit = 'h'
+) {
+  time_conversion_factor = 1
+  if (unit != 'model') {
+    if (is.na(model$model_units$time)) {
+      stop("Model time unit not specified.")
+    }
+    time_conversion_factor = 1 / get_time_conversion_factor(
+      model$unit_defs[[model$model_units$time]],
+      unit
+    )
+  }
+
+  times <- seq(
+    0,
+    time_conversion_factor * duration,
+    time_conversion_factor * step
+  )
+  return(times)
+}
+
+#' Create a deSolve-compatible events data frame
 #'
 #' Converts a list of structured dosing scenarios into an event data frame
-#' suitable for use with the \pkg{deSolve} package in differential equation
-#' modeling.
+#' that can be used as the `events` argument for running PBK model simulations
+#' using \code{\link[deSolve]{ode}}.
 #'
 #' This function interprets each dosing scenario (specified as a named list)
 #' based on its type (e.g., bolus vs. continuous, single vs. repeated) and
@@ -62,7 +242,13 @@
 #'     interval = 24,
 #'     until = 96
 #'   ),
-#'   list(target = "AAir", dose_type = "single_continuous", amount = 20, time = 0, duration = 24),
+#'   list(
+#'     target = "AAir",
+#'     dose_type = "single_continuous",
+#'     amount = 20,
+#'     time = 0,
+#'     duration = 24
+#'   ),
 #'   list(
 #'     target = "AAir",
 #'     dose_type = "repeated_continuous",
@@ -74,12 +260,13 @@
 #'   )
 #' )
 #'
-#' events <- create_dosing_events(model, dosing_events)
+#' events <- create_desolve_events(model, dosing_events)
 #' head(events)
 #'
 #' @importFrom utils head
+#' @seealso \code{\link[deSolve]{ode}}
 #' @export
-create_dosing_events <- function(
+create_desolve_events <- function(
   model,
   dosing_events,
   time_unit = 'h',
@@ -194,62 +381,11 @@ create_dosing_events <- function(
   }
 
   event_data <- do.call(rbind, c(bolus_list, continuous_list))
-  event_data <- event_data[order(event_data$time), ]
+  if (length(event_data) > 0) {
+    event_data <- event_data[order(event_data$time), ]
+  }
   rownames(event_data) <- NULL
+
   return(event_data)
 }
 
-#' Create a \code{deSolve} compliant \code{times} sequence, specifying the times
-#' for which simulation output is wanted.
-#'
-#' @param model An object of class \code{sbmlModel}.
-#' @param duration A number describing the total duration of the simulation.
-#' @param step A number describing the resolution in terms of step size.
-#' @param unit An optional character string describing the time unit of the
-#' specified duration and step length. Timings are aligned with the
-#' time unit of the \code{model}. Current options are "h" for hours (default),
-#' "d" for days, or "model" when assuming the specified duration and step length
-#' are considered in line with the time unit of the \code{model}.
-#'
-#' @return A \code{vector} of simulation output times formatted for use as the
-#' \code{times} argument in \code{deSolve::ode()}.
-#'
-#' @examples
-#' model_file <- system.file("extdata/", "simple_oral.sbml", package = "sbmlpbk")
-#' model <- load_sbml(model_file)
-#'
-#' times <- create_times_seq(
-#'   model,
-#'   duration = 10, # 10 days
-#'   step = 1/24,   # every hour
-#'   unit = 'd'     # times in days
-#' )
-#'
-#' head(times)
-#'
-#' @importFrom utils head
-#' @export
-create_times_seq <- function(
-    model,
-    duration,
-    step,
-    unit = 'h'
-) {
-  time_conversion_factor = 1
-  if (unit != 'model') {
-    if (is.na(model$model_units$time)) {
-      stop("Model time unit not specified.")
-    }
-    time_conversion_factor = get_time_conversion_factor(
-      model$unit_defs[[model$model_units$time]],
-      unit
-    )
-  }
-
-  times <- seq(
-    0,
-    time_conversion_factor * duration,
-    time_conversion_factor * step
-  )
-  return(times)
-}

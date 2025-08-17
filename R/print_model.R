@@ -11,12 +11,12 @@
 summary.sbmlModel <- function(object, ...) {
   stopifnot(inherits(object, "sbmlModel"))
   summary_list <- list(
-    compartment_count = length(object$compartment_ids),
-    compartment_ids = object$compartment_ids,
-    species_count = length(object$species_ids),
-    species_ids = object$species_ids,
-    param_count = length(object$param_ids),
-    param_ids = object$param_ids,
+    compartment_count = length(object$compartment),
+    compartment_ids = names(object$compartment),
+    species_count = length(object$species),
+    species_ids = names(object$species),
+    param_count = length(object$params),
+    param_ids = names(object$params),
     function_count = length(object$function_defs),
     function_ids = names(object$function_defs),
     reaction_count = length(object$reactions),

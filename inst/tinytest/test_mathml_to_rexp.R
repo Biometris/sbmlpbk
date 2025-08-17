@@ -28,7 +28,7 @@ piecewise_node <- xml2::xml_find_first(doc, ".//d1:piecewise")
 r_expr <- sbmlpbk:::mathml_to_r(piecewise_node)
 
 # Expected result
-expected_expr <- "ifelse((x<0), 1, ifelse((x==0), 2, 3))"
+expected_expr <- "ifelse(x < 0, 1, ifelse(x == 0, 2, 3))"
 
 # Assert equality
 expect_equal(r_expr, expected_expr)

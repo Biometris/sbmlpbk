@@ -41,7 +41,7 @@ load_params <- function(model, filename, param_instance, ...) {
   df <- df[df$idModelInstance == param_instance, ]
 
   # Check for unknown parameters
-  unknown_params <- setdiff(df$Parameter, names(model$default_params))
+  unknown_params <- setdiff(df$Parameter, names(model$params))
   if (length(unknown_params) > 0) {
     stop(paste0("Unknown parameter(s) in file: ", paste(unknown_params, collapse = ", ")))
   }
@@ -49,14 +49,14 @@ load_params <- function(model, filename, param_instance, ...) {
   # Create a named numeric vector
   params <- setNames(df$Value, as.character(df$Parameter))
 
-  # Fill missing parameters from model$default_params
-  missing_params <- setdiff(names(model$default_params), names(params))
+  # Fill missing parameters from default model params
+  missing_params <- setdiff(names(model$params), names(params))
   if (length(missing_params) > 0) {
-    params[missing_params] <- model$default_params[missing_params]
+    params[missing_params] <- model$params[missing_params]
   }
 
-  # Reorder to match model$default_params
-  params <- params[names(model$default_params)]
+  # Reorder to match params order
+  params <- params[names(model$params)]
 
   return(params)
 }

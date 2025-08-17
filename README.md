@@ -14,49 +14,58 @@ remotes::install_github("Biometris/sbmlpbk", ref = "main", dependencies = TRUE)
 To load an SBML model from a file, simply use the `load_sbml` function. The following example loads the file `simple_oral.sbml` provided with the package:
 
 ``` r
-## Load package
+# Load package
 library(sbmlpbk)
 
-## Get filename
+# Get filename
 file_simple_oral <- system.file("extdata/", "simple_oral.sbml", package = "sbmlpbk")
 
-## Load model
+# Load model
 model <- load_sbml(file_simple_oral)
+
+# Get model summary
+summary(model)
 ```
 
 The code below shows how to run simulations using the `ode` function of `deSolve`.
 
 ``` r
-## Load package deSolve
+# Load package deSolve
 library(deSolve)
 
-## Load model functions
+# Load model functions
 load_functions(model)
 
-## Load params
+# Load params
 params_csv <- system.file("extdata/", "simple_oral_params.csv", package = "sbmlpbk")
 params <- load_params(model, file = params_csv, param_instance = "simple_PARAM")
 
 # Set input species
 input_species <- "AGut"
 
-# Set input events (single unit bolus at time 5)
-eventdat <- data.frame(var = c(input_species), time = c(5), value = c(1), method = c("add"))
+# Set input events (single unit bolus at time 1)
+eventdat <- data.frame(var = c(input_species), time = c(1), value = c(1), method = c("add"))
 
 # Set initial states
-initial_states <- setNames(as.numeric(rep(0, length((model$species)))), model$species)
+initial_states <- setNames(rep(0, length(model$species)), names(model$species))
 
 # Set simulation times
-times <- seq(0, 40, 0.1)
+times <- seq(0, 40, 1)
+
+# Load deSolve model function
+func <- create_desolve_func(model)
 
 # Simulate
 out <- ode(
   y = initial_states,
   times = times,
-  func = model$func,
+  func = func,
   parms = params,
   events = list(data = eventdat)
 )
+
+# Plot results
+plot(out)
 ```
 
 ## Detailed example

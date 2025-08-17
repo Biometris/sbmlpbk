@@ -1,21 +1,17 @@
 #' @noRd
 #' @keywords internal
-mathml_to_r <- function(math_node) {
+mathml_to_r <- function(math_node, simplify = TRUE) {
   ns <- c(mathml = "http://www.w3.org/1998/Math/MathML")
   node_type <- xml2::xml_name(math_node)
 
-  # Constant number
   if (node_type == "cn") {
-    return(trimws(xml2::xml_text(math_node)))
-  }
-
-  # Variable identifier
-  if (node_type == "ci") {
-    return(trimws(xml2::xml_text(math_node)))
-  }
-
-  # Piecewise function
-  if (node_type == "piecewise") {
+    # Constant number
+    r_expr <- trimws(xml2::xml_text(math_node))
+  } else if (node_type == "ci") {
+    # Variable identifier
+    r_expr <- trimws(xml2::xml_text(math_node))
+  } else if (node_type == "piecewise") {
+    # Piecewise function
     pieces <- xml2::xml_children(math_node)
 
     r_expr <- NULL
@@ -28,8 +24,8 @@ mathml_to_r <- function(math_node) {
           stop("<piece> must have exactly 2 children: value and condition.")
         }
 
-        value_expr <- mathml_to_r(children[[1]])
-        condition_expr <- mathml_to_r(children[[2]])
+        value_expr <- mathml_to_r(children[[1]], FALSE)
+        condition_expr <- mathml_to_r(children[[2]], FALSE)
 
         # Nest condition using ifelse
         if (is.null(r_expr)) {
@@ -40,7 +36,7 @@ mathml_to_r <- function(math_node) {
       }
 
       if (piece_type == "otherwise") {
-        other_expr <- mathml_to_r(xml2::xml_children(piece)[[1]])
+        other_expr <- mathml_to_r(xml2::xml_children(piece)[[1]], FALSE)
         r_expr <- paste0(r_expr, ", ", other_expr, strrep(")", length(xml2::xml_find_all(math_node, ".//mathml:piece", ns))))
       }
     }
@@ -49,12 +45,8 @@ mathml_to_r <- function(math_node) {
     if (!any(xml2::xml_name(xml2::xml_children(math_node)) == "otherwise")) {
       r_expr <- paste0(r_expr, ", NA", strrep(")", length(xml2::xml_find_all(math_node, ".//mathml:piece", ns))))
     }
-
-    return(r_expr)
-  }
-
-  # Operator/function application
-  if (node_type == "apply") {
+  } else if (node_type == "apply") {
+    # Operator/function application
     children <- xml2::xml_children(math_node)
     if (length(children) < 2) {
       stop("Malformed <apply> node: less than 2 children.")
@@ -67,46 +59,48 @@ mathml_to_r <- function(math_node) {
     if (op_type == "ci") {
       func_name <- xml2::xml_text(op_node)
       args <- children[-1]
-      r_args <- sapply(args, mathml_to_r)
-      return(paste0(func_name, "(", paste(r_args, collapse = ", "), ")"))
+      r_args <- sapply(args, function(x) { mathml_to_r(x, FALSE) })
+      r_expr <- paste0(func_name, "(", paste(r_args, collapse = ", "), ")")
+    } else {
+      # Handle standard MathML operators like <plus/>, <times/>, etc.
+      operator <- op_type
+      args <- children[-1]
+      r_args <- sapply(args, function(x) { mathml_to_r(x, FALSE) })
+
+      op_map <- list(
+        plus = "+",
+        minus = "-",
+        times = "*",
+        divide = "/",
+        power = "^",
+        eq = "==",
+        neq = "!=",
+        lt = "<",
+        leq = "<=",
+        gt = ">",
+        geq = ">="
+      )
+
+      if (operator %in% names(op_map)) {
+        # Binary operators
+        r_expr <- paste("(", paste0(r_args, collapse = op_map[[operator]], sep=""), ")", sep="")
+      } else if (operator == "minus" && length(r_args) == 1) {
+        # Unary minus
+        r_expr <- paste0("-(", r_args[1], ")")
+      } else if (operator %in% c("exp", "log", "sin", "cos", "tan", "sqrt", "min", "max")) {
+        # Built-in function (non-<ci>)
+        r_expr <- paste0(operator, "(", paste(r_args, collapse = ", "), ")")
+      } else {
+        stop(paste("Unsupported MathML operator:", operator))
+      }
     }
-
-    # Handle standard MathML operators like <plus/>, <times/>, etc.
-    operator <- op_type
-    args <- children[-1]
-    r_args <- sapply(args, mathml_to_r)
-
-    op_map <- list(
-      plus = "+",
-      minus = "-",
-      times = "*",
-      divide = "/",
-      power = "^",
-      eq = "==",
-      neq = "!=",
-      lt = "<",
-      leq = "<=",
-      gt = ">",
-      geq = ">="
-    )
-
-    # Binary operators
-    if (operator %in% names(op_map)) {
-      return(paste("(", paste0(r_args, collapse = op_map[[operator]], sep=""), ")", sep=""))
-    }
-
-    # Unary minus
-    if (operator == "minus" && length(r_args) == 1) {
-      return(paste0("-(", r_args[1], ")"))
-    }
-
-    # Built-in function (non-<ci>)
-    if (operator %in% c("exp", "log", "sin", "cos", "tan", "sqrt", "min", "max")) {
-      return(paste0(operator, "(", paste(r_args, collapse = ", "), ")"))
-    }
-
-    stop(paste("Unsupported MathML operator:", operator))
+  } else {
+    stop(paste("Unsupported MathML element:", node_type))
   }
 
-  stop(paste("Unsupported MathML element:", node_type))
+  if (simplify) {
+    r_expr <- Deriv::Simplify(r_expr)
+  }
+
+  return(r_expr)
 }
