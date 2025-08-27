@@ -10,6 +10,74 @@ mathml_to_r <- function(math_node, simplify = TRUE) {
   } else if (node_type == "ci") {
     # Variable identifier
     r_expr <- trimws(xml2::xml_text(math_node))
+  } else if (node_type == "apply") {
+    # Operator/function application
+    children <- xml2::xml_children(math_node)
+    if (length(children) < 2) {
+      stop("Malformed <apply> node: less than 2 children.")
+    }
+
+    op_node <- children[[1]]
+    op_type <- xml2::xml_name(op_node)
+
+    # Handle <ci> as function name (user-defined or variable-based)
+    if (op_type == "ci") {
+      func_name <- xml2::xml_text(op_node)
+      args <- children[-1]
+      r_args <- sapply(args, function(x) { mathml_to_r(x, FALSE) })
+      r_expr <- paste0(func_name, "(", paste(r_args, collapse = ", "), ")")
+    } else {
+      # Handle standard MathML operators like <plus/>, <times/>, etc.
+      operator <- op_type
+      args <- children[-1]
+
+      op_map <- list(
+        plus = "+",
+        minus = "-",
+        times = "*",
+        divide = "/",
+        power = "^",
+        eq = "==",
+        neq = "!=",
+        lt = "<",
+        leq = "<=",
+        gt = ">",
+        geq = ">="
+      )
+
+      if (operator == "minus" && length(args) == 1) {
+        # Unary minus
+        r_args <- sapply(args, function(x) mathml_to_r(x, FALSE))
+        r_expr <- paste0("-(", r_args[1], ")")
+      } else if (operator == "ln") {
+        # Natural log
+        r_args <- sapply(args, function(x) mathml_to_r(x, FALSE))
+        r_expr <- paste0("log(", paste(r_args, collapse = ", "), ")")
+      } else if (operator == "log") {
+        # Check for log base
+        logbase <- xml2::xml_find_first(math_node, ".//mathml:logbase", ns)
+        if (!is.na(logbase)) {
+          base_node <- xml2::xml_children(logbase)[[1]]
+          base_expr <- mathml_to_r(base_node, FALSE)
+          r_arg <- mathml_to_r(args[[2]], FALSE)
+          r_expr <- paste0("log(", r_arg, ", base = ", base_expr, ")")
+        } else {
+          # Default: assume log base 10
+          r_args <- sapply(args, function(x) mathml_to_r(x, FALSE))
+          r_expr <- paste0("log10(", paste(r_args, collapse = ", "), ")")
+        }
+      } else if (operator %in% names(op_map)) {
+        # Binary operators
+        r_args <- sapply(args, function(x) mathml_to_r(x, FALSE))
+        r_expr <- paste("(", paste0(r_args, collapse = op_map[[operator]], sep=""), ")", sep="")
+      } else if (operator %in% c("exp", "log", "sin", "cos", "tan", "sqrt", "min", "max")) {
+        # Built-in function (non-<ci>)
+        r_args <- sapply(args, function(x) mathml_to_r(x, FALSE))
+        r_expr <- paste0(operator, "(", paste(r_args, collapse = ", "), ")")
+      } else {
+        stop(paste("Unsupported MathML operator:", operator))
+      }
+    }
   } else if (node_type == "piecewise") {
     # Piecewise function
     pieces <- xml2::xml_children(math_node)
@@ -45,55 +113,13 @@ mathml_to_r <- function(math_node, simplify = TRUE) {
     if (!any(xml2::xml_name(xml2::xml_children(math_node)) == "otherwise")) {
       r_expr <- paste0(r_expr, ", NA", strrep(")", length(xml2::xml_find_all(math_node, ".//mathml:piece", ns))))
     }
-  } else if (node_type == "apply") {
-    # Operator/function application
+  } else if (node_type == "logbase") {
+    # Return the content of the logbase node (usually a <cn>)
     children <- xml2::xml_children(math_node)
-    if (length(children) < 2) {
-      stop("Malformed <apply> node: less than 2 children.")
+    if (length(children) != 1) {
+      stop("<logbase> must have exactly one child")
     }
-
-    op_node <- children[[1]]
-    op_type <- xml2::xml_name(op_node)
-
-    # Handle <ci> as function name (user-defined or variable-based)
-    if (op_type == "ci") {
-      func_name <- xml2::xml_text(op_node)
-      args <- children[-1]
-      r_args <- sapply(args, function(x) { mathml_to_r(x, FALSE) })
-      r_expr <- paste0(func_name, "(", paste(r_args, collapse = ", "), ")")
-    } else {
-      # Handle standard MathML operators like <plus/>, <times/>, etc.
-      operator <- op_type
-      args <- children[-1]
-      r_args <- sapply(args, function(x) { mathml_to_r(x, FALSE) })
-
-      op_map <- list(
-        plus = "+",
-        minus = "-",
-        times = "*",
-        divide = "/",
-        power = "^",
-        eq = "==",
-        neq = "!=",
-        lt = "<",
-        leq = "<=",
-        gt = ">",
-        geq = ">="
-      )
-
-      if (operator %in% names(op_map)) {
-        # Binary operators
-        r_expr <- paste("(", paste0(r_args, collapse = op_map[[operator]], sep=""), ")", sep="")
-      } else if (operator == "minus" && length(r_args) == 1) {
-        # Unary minus
-        r_expr <- paste0("-(", r_args[1], ")")
-      } else if (operator %in% c("exp", "log", "sin", "cos", "tan", "sqrt", "min", "max")) {
-        # Built-in function (non-<ci>)
-        r_expr <- paste0(operator, "(", paste(r_args, collapse = ", "), ")")
-      } else {
-        stop(paste("Unsupported MathML operator:", operator))
-      }
-    }
+    r_expr <- mathml_to_r(children[[1]], FALSE)
   } else {
     stop(paste("Unsupported MathML element:", node_type))
   }
