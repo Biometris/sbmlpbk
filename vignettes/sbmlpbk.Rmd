@@ -153,7 +153,7 @@ evals_per_day = 24
 times <- create_desolve_times(
   model,
   duration = num_days,
-  step = 1/24,
+  step = 1/evals_per_day,
   unit = 'd'
 )
 
@@ -185,7 +185,7 @@ n_cols <- 3
 n_rows <- ceiling(length(model$species) / n_cols)
 par(mfrow = c(n_rows, n_cols), mar = c(4, 4, 2, 1))
 
-# Loop through variables and plot
+# Loop through species and plot
 for (species in names(model$species)) {
   plot(out[,1], out[,species],
        type = "l",
