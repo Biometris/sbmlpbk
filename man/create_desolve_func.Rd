@@ -4,18 +4,14 @@
 \alias{create_desolve_func}
 \title{Create a deSolve-compatible model function}
 \usage{
-create_desolve_func(model, compartment_ids = NULL, param_ids = NULL)
+create_desolve_func(model, outputs = NULL)
 }
 \arguments{
 \item{model}{SBML model S3 class.}
 
-\item{compartment_ids}{Optional character vector of compartment IDs. If provided,
-these compartments will be included as additional output variables in the
-deSolve function.}
-
-\item{param_ids}{Optional character vector of parameter IDs. If provided,
-these parameters will be included as additional output variables in the
-deSolve function.}
+\item{outputs}{Optional named list of equations (character strings). Each element
+defines a derived output, e.g. concentrations or calculated parameters:
+\code{list(CGut = "Agut / Gut", BW = "BW")}.}
 }
 \value{
 A function with signature \code{function(time, state, parameters)} suitable
@@ -40,7 +36,13 @@ model_file <- system.file("extdata/", "simple_oral.sbml", package = "sbmlpbk")
 model <- load_sbml(model_file)
 
 # Create deSolve-compatible function
-func <- create_desolve_func(model, names(model$compartments), names(model$params))
+func <- create_desolve_func(
+  model,
+  list(
+    CGut = "AGut / Gut",
+    BW = "BW"
+  )
+)
 
 # Set initial states
 initial_states <- setNames(rep(0, length(model$species)), names(model$species))

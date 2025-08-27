@@ -19,6 +19,8 @@ summary.sbmlModel <- function(object, ...) {
     param_ids = names(object$params),
     function_count = length(object$function_defs),
     function_ids = names(object$function_defs),
+    assignment_rule_count = length(object$assignment_rules),
+    rate_rule_count = length(object$rate_rules),
     reaction_count = length(object$reactions),
     time_unit = if (!is.na(object$model_units$time))
       create_unit_string(object$unit_defs[[object$model_units$time]])
@@ -119,7 +121,10 @@ print_summary <- function(x, ...) {
   }
   cat("\n")
 
-  cat("Reactions:\t", x$reaction_count, "\n\n")
+  cat("Assignment rules:\t", x$assignment_rule_count, "\n")
+  cat("Rate rules:\t", x$rate_rule_count, "\n")
+  cat("Reactions:\t", x$reaction_count, "\n")
+  cat("\n")
 
   cat("Time unit:\t", x$time_unit, "\n")
   cat("Amount unit:\t", x$amount_unit, "\n")
@@ -133,16 +138,21 @@ print_summary <- function(x, ...) {
 #' @keywords internal
 print_equations <- function(model) {
   if (length(model$function_defs) > 0) {
-    cat("## Functions\n")
+    cat("# --- Functions ---\n")
     sapply(model$function_defs, FUN = function(x) cat(paste0(x, "\n", sep="")))
   }
   cat("\n")
-  cat("## Assignments\n")
-  if (length(model$rules) > 0) {
-    sapply(model$rules, FUN = function(x) cat(paste0(x, "\n", sep="")))
+  cat("# --- Assignment rules ---\n")
+  if (length(model$assignment_rules) > 0) {
+    sapply(model$assignment_rules, FUN = function(x) cat(paste0(x, "\n", sep="")))
   }
   cat("\n")
-  cat("## ODEs\n")
+  if (length(model$rate_rules) > 0) {
+    cat("# --- Rate rules ---\n")
+    sapply(model$rate_rules, FUN = function(x) cat(paste0(x, "\n", sep="")))
+  }
+  cat("\n")
+  cat("# --- Transfer ODEs ---\n")
   sapply(model$odes, FUN = function(x) cat(paste0(x, "\n", sep="")))
   cat("\n")
 

@@ -46,7 +46,8 @@ The output of the `loadSBML` function is an object of class `sbmlModel`. This ob
 - **param: ** A named list with the IDs and (default) values of the model parameters.
 - **function_defs: ** A list of the additional functions defined in the SBML file, each in the form of character strings representing R expressions. 
 - **reactions: ** A list of reactions, each defined as a list of ID, reactant (species ID), product (species ID), and kinetic law (character string of R expression).
-- **rules: ** A list of the assignment rules defined in the SBML file, each in the form of character strings representing the R expression. 
+- **assignment_rules: ** A list of the assignment rules defined in the SBML file, each in the form of character strings representing the R expression. 
+- **rate_rules: ** A list of the rate rules defined in the SBML file, each in the form of character strings representing the R expression. 
 - **odes: ** A list of ODEs generated from the SBML file, each in the form of character strings representing the R expression. 
 - **default_params: ** Vector with the default values of the parameters of the model.
 - **func: ** A `deSolve` compliant R-function for running simulations using the `ode` function. 
@@ -194,3 +195,51 @@ for (species in names(model$species)) {
        ylab = paste(species, " [", summary(model)$amount_unit, "]", sep=""))
 }
 ```
+## Additional simulation outputs
+
+Additional simulation outputs, such as dynamic parameters, compartment sizes, but also outputs as concentrations, can be included via the `outputs` argument of the `create_desolve_func` function. In the code below, three additional outputs are defined. Size of the blood compartment (i.e., blood volume), concentration in blood, and the value of the body weight parameter (here constant during simulation).
+
+```{r additionalOutputs}
+# Define additional outputs
+outputs <- list(
+  Blood = "Blood",
+  CBlood = "ABlood / Blood",
+  BW = "BW"
+)
+
+# Load deSolve model function with additional outputs
+func <- create_desolve_func(
+  model,
+  outputs = outputs
+)
+
+# Simulate
+out <- ode(
+  y = initial_states,
+  times = times,
+  func = func,
+  parms = model$params,
+  events = list(data = eventdat)
+)
+
+# Set up plotting layout
+par(mfrow = c(2, 2), mar = c(4, 4, 2, 1))
+
+# Plot amount of chemical in blood
+plot(out[,1], out[,'ABlood'],
+       type = "l",
+       main = 'ABlood',
+       xlab = paste("time [", summary(model)$time_unit, "]", sep=""),
+       ylab = 'ABlood')
+
+# Loop through outputs and plot
+for (output in names(outputs)) {
+  plot(out[,1], out[,species],
+       type = "l",
+       main = output,
+       xlab = paste("time [", summary(model)$time_unit, "]", sep=""),
+       ylab = output)
+}
+```
+
+

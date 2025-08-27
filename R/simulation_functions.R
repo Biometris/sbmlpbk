@@ -22,12 +22,9 @@ load_functions <- function(model, envir = parent.frame()) {
 #' optionally including selected compartment and parameter values in the output.
 #'
 #' @param model SBML model S3 class.
-#' @param compartment_ids Optional character vector of compartment IDs. If provided,
-#'   these compartments will be included as additional output variables in the
-#'   deSolve function.
-#' @param param_ids Optional character vector of parameter IDs. If provided,
-#'   these parameters will be included as additional output variables in the
-#'   deSolve function.
+#' @param outputs Optional named list of equations (character strings). Each element
+#'   defines a derived output, e.g. concentrations or calculated parameters:
+#'   \code{list(CGut = "Agut / Gut", BW = "BW")}.
 #'
 #' @return A function with signature \code{function(time, state, parameters)} suitable
 #' for use with \code{\link[deSolve]{ode}}. The returned function produces a list with:
@@ -45,7 +42,13 @@ load_functions <- function(model, envir = parent.frame()) {
 #' model <- load_sbml(model_file)
 #'
 #' # Create deSolve-compatible function
-#' func <- create_desolve_func(model, names(model$compartments), names(model$params))
+#' func <- create_desolve_func(
+#'   model,
+#'   list(
+#'     CGut = "AGut / Gut",
+#'     BW = "BW"
+#'   )
+#' )
 #'
 #' # Set initial states
 #' initial_states <- setNames(rep(0, length(model$species)), names(model$species))
@@ -67,54 +70,54 @@ load_functions <- function(model, envir = parent.frame()) {
 #' @export
 create_desolve_func <- function(
     model,
-    compartment_ids = NULL,
-    param_ids = NULL
+    outputs = NULL
 ) {
   function(time, state, parameters) {
     with(as.list(c(state, parameters)), {
 
       # Evaluate assignment rules and assign to local variables
-      if (length(model$rules) > 0) {
-        for (eqn in model$rules) {
+      if (length(model$assignment_rules) > 0) {
+        for (eqn in model$assignment_rules) {
           # Evaluate in local environment
           eval(parse(text = eqn), envir = environment())
         }
       }
 
-      # Load derivatives functions
+      # Evaluate derivatives from ODEs
       derivs <- lapply(
         model$odes,
         function(eqn) eval(parse(text = eqn), envir = environment())
       )
-      names(derivs) <- names(state)
+      names(derivs) <- names(model$odes)
 
-      # Include selected compartments in deSolve func
-      if (!is.null(compartment_ids)) {
-        compartment_values <- lapply(
-          compartment_ids,
-          function(cmp_id) {
-            eval(parse(text = paste(cmp_id, '=', cmp_id)), envir = environment())
-          }
+      # Handle rate rules
+      if (length(model$rate_rules) > 0) {
+        # Evaluate derivatives from rate rules
+        dy_rate_rules <- lapply(
+          model$rate_rules,
+          function(eqn) eval(parse(text = eqn), envir = environment())
         )
-        names(compartment_values) <- compartment_ids
-      } else {
-        compartment_values <- NULL
+        names(dy_rate_rules) <- names(model$rate_rules)
+
+        all_vars <- union(names(dy_rate_rules), names(derivs))
+
+        # Merge: rate rules take precedence
+        derivs[names(dy_rate_rules)] <- dy_rate_rules
+        derivs <- derivs[all_vars]
       }
 
-      # Include selected parameters in deSolve func
-      if (!is.null(param_ids)) {
-        param_values <- lapply(
-          param_ids,
-          function(param_id) {
-            eval(parse(text = paste(param_id, '=', param_id)), envir = environment())
-          }
+      # Evaluate requested outputs
+      if (!is.null(outputs)) {
+        output_values <- lapply(
+          outputs,
+          function(expr) eval(parse(text = expr), envir = environment())
         )
-        names(param_values) <- param_values
+        names(output_values) <- names(outputs)
       } else {
-        param_values <- NULL
+        output_values <- list()
       }
 
-      return(list(derivs, do.call(c, list(compartment_values, param_values))))
+      return(list(derivs, do.call(c, output_values)))
     })
   }
 }

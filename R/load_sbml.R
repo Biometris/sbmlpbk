@@ -169,7 +169,7 @@ load_sbml <- function(sbml_file) {
   # Extract species and initial conditions
   functions_list <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfFunctionDefinitions/sbml:functionDefinition", ns)
   function_defs <- stats::setNames(
-    # Convert each rule to R syntax and store in a named list
+    # Convert each function to R syntax and store in a named list
     lapply(functions_list, function(fct) {
       fct_id <- xml2::xml_attr(fct, "id")
       # Find the <math> node
@@ -181,10 +181,10 @@ load_sbml <- function(sbml_file) {
   )
 
   # Extract assignment rules
-  rule_nodes <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfRules/sbml:assignmentRule", ns)
-  rules <- stats::setNames(
+  assignment_rule_nodes <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfRules/sbml:assignmentRule", ns)
+  assignment_rules <- stats::setNames(
     # Convert each rule to R syntax and store in a named list
-    lapply(rule_nodes, function(rule) {
+    lapply(assignment_rule_nodes, function(rule) {
       variable <- xml2::xml_attr(rule, "variable")
       # Find the <math> node
       math_node <- xml2::xml_find_first(rule, ".//mathml:math", ns)
@@ -192,8 +192,29 @@ load_sbml <- function(sbml_file) {
       expression <- mathml_to_r(xml2::xml_children(math_node)[[1]])
       paste0(variable, " <- ", expression)
     }),
-    sapply(rule_nodes, function(rule) xml2::xml_attr(rule, "variable"))
+    sapply(assignment_rule_nodes, function(rule) xml2::xml_attr(rule, "variable"))
   )
+
+  # Rate rules
+  rate_rule_nodes <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfRules/sbml:rateRule", ns)
+  rate_rules <-  stats::setNames(
+    # Convert each rule to R syntax and store in a named list
+    lapply(rate_rule_nodes, function(rule) {
+      variable <- xml2::xml_attr(rule, "variable")
+      # Find the <math> node
+      math_node <- xml2::xml_find_first(rule, ".//mathml:math", ns)
+      # Convert MathML to R
+      expression <- mathml_to_r(xml2::xml_children(math_node)[[1]])
+      paste0('d', variable, " <- ", expression)
+    }),
+    sapply(rate_rule_nodes, function(rule) xml2::xml_attr(rule, "variable"))
+  )
+
+  # Algebraic rules
+  algebraic_rule_nodes <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfRules/sbml:algebraicRule", ns)
+  if (length(algebraic_rule_nodes) > 0) {
+    stop("SBML model contains algebraic rules, which are currently not supported")
+  }
 
   # Check for initial assignments
   constraint_nodes <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfConstraints/sbml:constraint", ns)
@@ -285,7 +306,8 @@ load_sbml <- function(sbml_file) {
       params = params,
       function_defs = function_defs,
       reactions = reactions_data,
-      rules = rules,
+      assignment_rules = assignment_rules,
+      rate_rules = rate_rules,
       odes = odes,
       unit_defs = unit_defs,
       model_units = model_units

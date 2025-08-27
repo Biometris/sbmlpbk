@@ -20,7 +20,8 @@ fake_model_d_mg <- list(
   )
 )
 
-# Tests create times sequence
+## --- Test create_desolve_times ---
+
 times <- create_desolve_times(fake_model_h_ug, duration=10, step=1, unit='d')
 expect_equal(length(times), 11)
 expect_equal(times[1], 0)
@@ -47,7 +48,8 @@ expect_equal(length(times), 11)
 expect_equal(times[1], 0)
 expect_equal(times[11], 10)
 
-# Tests create dosing events
+## --- Test create_desolve_events ---
+
 eventdat <- create_desolve_events(
   model = fake_model_h_ug,
   dosing_events = list(
