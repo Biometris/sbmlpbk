@@ -17,3 +17,4 @@ Suggests:
     rmarkdown,
     tinytest
 VignetteBuilder: knitr
+URL: https://biometris.github.io/sbmlpbk/
