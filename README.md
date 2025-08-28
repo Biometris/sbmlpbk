@@ -7,7 +7,7 @@ An R package for importing Physiologically Based Kinetic (PBK) models encoded in
 Install from GitHub (using the [remotes](https://github.com/r-lib/remotes) package):
 
 ``` r
-remotes::install_github("Biometris/sbmlpbk", ref = "main", dependencies = TRUE)
+remotes::install_github("Biometris/sbmlpbk", ref = "main", dependencies = TRUE, build_vignettes = TRUE)
 ```
 ## Quickstart
 

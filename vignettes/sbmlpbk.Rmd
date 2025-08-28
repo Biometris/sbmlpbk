@@ -31,7 +31,7 @@ An R package for importing Physiologically Based Kinetic (PBK) models encoded in
 
 ## Loading a model
 
-Use the function `loadSBML` to load a PBK model from an SBML file. As an example, the package includes a simple SBML PBK model `simple_oral.sbml`. The following example shows how to load the model from this file:
+Use the function `load_sbml` to load a PBK model from an SBML file. As an example, the package includes a simple SBML PBK model `simple_oral.sbml`. The following example shows how to load the model from this file:
 
 ```{r loadSBML}
 ## Load SBML model from file
@@ -39,7 +39,7 @@ file_simple_oral <- system.file("extdata/", "simple_oral.sbml", package = "sbmlp
 model <- load_sbml(file_simple_oral)
 ```
 
-The output of the `loadSBML` function is an object of class `sbmlModel`. This object is a named `list` with of the following elements:
+The output of the `load_sbml` function is an object of class `sbmlModel`. This object is a named `list` with of the following elements:
 
 - **compartment: ** A named list with the IDs and default sizes of the model compartments.
 - **species: ** A named list with the IDs and other info of the model species.
