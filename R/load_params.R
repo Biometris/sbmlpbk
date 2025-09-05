@@ -12,7 +12,7 @@
 #'
 #' @param model An object of class \code{sbmlModel} for which the parametrisations should be loaded.
 #' @param filename Path to the CSV file containing parameters.
-#' @param param_instance The instance ID used to filter parameters.
+#' @param param_instance The instance ID used to filter parameters. When not specified, it is assumed that the file contains only one parametrisation.
 #' @param ... Additional arguments passed to \code{read.csv}.
 #'
 #' @return A named numeric vector with parameter values.
@@ -37,8 +37,10 @@
 load_params <- function(model, filename, param_instance, ...) {
   df <- read.csv(filename, ...)
   df$Value <- as.numeric(df$Value)
-  df$idModelInstance <- as.character(df$idModelInstance)
-  df <- df[df$idModelInstance == param_instance, ]
+  if (any(grepl('idModelInstance', names(df)))) {
+    df$idModelInstance <- as.character(df$idModelInstance)
+    df <- df[df$idModelInstance == param_instance, ]
+  }
 
   # Check for unknown parameters
   unknown_params <- setdiff(df$Parameter, names(model$params))

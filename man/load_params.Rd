@@ -11,7 +11,7 @@ load_params(model, filename, param_instance, ...)
 
 \item{filename}{Path to the CSV file containing parameters.}
 
-\item{param_instance}{The instance ID used to filter parameters.}
+\item{param_instance}{The instance ID used to filter parameters. When not specified, it is assumed that the file contains only one parametrisation.}
 
 \item{...}{Additional arguments passed to \code{read.csv}.}
 }
