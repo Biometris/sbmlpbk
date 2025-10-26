@@ -54,6 +54,73 @@ get_kinetic_law_expression <- function(xml_node, ns) {
   }
 }
 
+#' Determine evaluation order based on variable dependencies
+#'
+#' @description
+#' Performs a topological sort on a set of named dependencies (e.g., from
+#' SBML assignment rules) and returns the indices of elements in the order
+#' they should be evaluated so that all dependencies are resolved before use.
+#'
+#' @param dep_list
+#' A **named list** where each element is a character vector of identifiers
+#' (variable or parameter names) that the corresponding variable depends on.
+#' Each list name represents the variable being assigned.
+#'
+#' @return
+#' An integer vector of indices indicating the evaluation order of the
+#' elements in `dep_list`. This order guarantees that for each variable,
+#' all its dependencies have been evaluated earlier or are external to the list.
+#'
+#' @details
+#' The function implements a simple **topological sort**.  
+#' - Variables whose dependencies are not in `dep_list` are considered
+#'   already resolved (e.g., parameters or constants).  
+#' - If a circular dependency is detected (no variable can be resolved in
+#'   an iteration), the function stops with an error.
+#'
+#' @examples
+#' deps <- list(
+#'   x = c("a", "b"),
+#'   y = c("x"),
+#'   z = c("y", "c")
+#' )
+#'
+#' get_dependency_order(deps)
+#' #> [1] 1 2 3
+#'
+#' # Reorder list:
+#' deps[get_dependency_order(deps)]
+#'
+#' @noRd
+#' @keywords internal
+get_dependency_order <- function(dep_list) {
+  vars <- names(dep_list)
+  resolved <- character(0)
+  remaining <- dep_list
+  order_idx <- integer(0)
+
+  # Topological sort loop
+  while (length(remaining) > 0) {
+    # Find which rules can be resolved now (their dependencies are all outside remaining)
+    ready <- names(remaining)[
+      vapply(remaining, function(deps) all(!deps %in% names(remaining)), logical(1))
+    ]
+
+    if (length(ready) == 0) {
+      stop("Circular or unresolved dependency detected in assignment rules.")
+    }
+
+    # Append indices of resolved variables in the original list
+    order_idx <- c(order_idx, match(ready, vars))
+
+    # Remove resolved from remaining
+    remaining <- remaining[!names(remaining) %in% ready]
+    remaining <- lapply(remaining, function(deps) setdiff(deps, ready))
+  }
+
+  order_idx
+}
+
 #' Load SBML model
 #'
 #' @param sbml_file File path of the SBML file.
@@ -188,12 +255,22 @@ load_sbml <- function(sbml_file) {
       variable <- xml2::xml_attr(rule, "variable")
       # Find the <math> node
       math_node <- xml2::xml_find_first(rule, ".//mathml:math", ns)
+      # Extract identifiers (variables, parameters, etc.)
+      ids <- xml2::xml_find_all(math_node, ".//mathml:ci", ns)
+      params <- unique(trimws(xml2::xml_text(ids)))
       # Convert MathML to R
       expression <- mathml_to_r(xml2::xml_children(math_node)[[1]])
-      paste0(variable, " <- ", expression)
+      list(
+        variable = variable,
+        expression = paste0(variable, " <- ", expression),
+        params = params
+      )
     }),
     sapply(assignment_rule_nodes, function(rule) xml2::xml_attr(rule, "variable"))
   )
+  assignment_rules <- assignment_rules[
+    get_dependency_order(lapply(assignment_rules, function(x) x$params))
+  ]
 
   # Rate rules
   rate_rule_nodes <- xml2::xml_find_all(sbml_xml, ".//sbml:listOfRules/sbml:rateRule", ns)
@@ -203,9 +280,16 @@ load_sbml <- function(sbml_file) {
       variable <- xml2::xml_attr(rule, "variable")
       # Find the <math> node
       math_node <- xml2::xml_find_first(rule, ".//mathml:math", ns)
+      # Extract identifiers (variables, parameters, etc.)
+      ids <- xml2::xml_find_all(math_node, ".//mathml:ci", ns)
+      params <- unique(trimws(xml2::xml_text(ids)))
       # Convert MathML to R
       expression <- mathml_to_r(xml2::xml_children(math_node)[[1]])
-      paste0('d', variable, " <- ", expression)
+      list(
+        variable = variable,
+        expression = paste0('d', variable, " <- ", expression),
+        params = params
+      )
     }),
     sapply(rate_rule_nodes, function(rule) xml2::xml_attr(rule, "variable"))
   )

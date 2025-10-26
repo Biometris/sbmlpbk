@@ -144,12 +144,12 @@ print_equations <- function(model) {
   cat("\n")
   cat("# --- Assignment rules ---\n")
   if (length(model$assignment_rules) > 0) {
-    sapply(model$assignment_rules, FUN = function(x) cat(paste0(x, "\n", sep="")))
+    sapply(model$assignment_rules, FUN = function(x) cat(paste0(x$expression, "\n", sep="")))
   }
   cat("\n")
   if (length(model$rate_rules) > 0) {
     cat("# --- Rate rules ---\n")
-    sapply(model$rate_rules, FUN = function(x) cat(paste0(x, "\n", sep="")))
+    sapply(model$rate_rules, FUN = function(x) cat(paste0(x$expression, "\n", sep="")))
   }
   cat("\n")
   cat("# --- Transfer ODEs ---\n")

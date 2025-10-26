@@ -1,5 +1,5 @@
 ---
-title: "Load SBML and run simulation"
+title: "The sbmlpbk package"
 author: "Johannes Kruisselbrink"
 date: "`r Sys.Date()`"
 output: 

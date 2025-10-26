@@ -77,9 +77,9 @@ create_desolve_func <- function(
 
       # Evaluate assignment rules and assign to local variables
       if (length(model$assignment_rules) > 0) {
-        for (eqn in model$assignment_rules) {
+        for (rule in model$assignment_rules) {
           # Evaluate in local environment
-          eval(parse(text = eqn), envir = environment())
+          eval(parse(text = rule$expression), envir = environment())
         }
       }
 
@@ -95,7 +95,7 @@ create_desolve_func <- function(
         # Evaluate derivatives from rate rules
         dy_rate_rules <- lapply(
           model$rate_rules,
-          function(eqn) eval(parse(text = eqn), envir = environment())
+          function(rule) eval(parse(text = rule$expression), envir = environment())
         )
         names(dy_rate_rules) <- names(model$rate_rules)
 
@@ -391,4 +391,3 @@ create_desolve_events <- function(
 
   return(event_data)
 }
-
